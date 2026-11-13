@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "دفتر البيع والديون",
+    "slug": "alfkeh-alreian",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "splash": {
+      "backgroundColor": "#f5f7fb"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.alfkeh.alreian"
+    }
+  }
+}
