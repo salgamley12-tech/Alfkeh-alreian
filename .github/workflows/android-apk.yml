@@ -35,20 +35,46 @@ jobs:
       - name: Generate Android native project
         run: npx expo prebuild --platform android --non-interactive --clean
 
-      - name: Force Kotlin 1.9.25 in gradle.properties
+      - name: Force Kotlin 1.9.25 in generated Android project (Comprehensive)
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          gradle_props = Path('android/gradle.properties')
-          if gradle_props.exists():
-              content = gradle_props.read_text()
-              lines = [l for l in content.splitlines() if not l.strip().startswith('android.kotlinVersion=')]
-              lines.append('android.kotlinVersion=1.9.25')
-              gradle_props.write_text('\n'.join(lines) + '\n')
-              print("Successfully updated android.kotlinVersion to 1.9.25")
-          else:
-              print("Error: gradle.properties not found!")
+          android = Path('android')
+
+          # gradle.properties
+          gradle_properties = android / 'gradle.properties'
+          props = gradle_properties.read_text() if gradle_properties.exists() else ''
+          lines = [line for line in props.splitlines() if not line.strip().startswith('android.kotlinVersion=')]
+          lines.append('android.kotlinVersion=1.9.25')
+          gradle_properties.write_text('\n'.join(lines) + '\n')
+
+          # build.gradle
+          build_gradle = android / 'build.gradle'
+          if build_gradle.exists():
+              text = build_gradle.read_text()
+              text = text.replace('kotlinVersion = "1.9.24"', 'kotlinVersion = "1.9.25"')
+              if 'kotlinVersion = "1.9.25"' not in text:
+                  marker = 'minSdkVersion = 24\n        compileSdkVersion = 35\n        targetSdkVersion = 35\n'
+                  replacement = 'minSdkVersion = 24\n        compileSdkVersion = 35\n        targetSdkVersion = 35\n        kotlinVersion = "1.9.25"\n'
+                  if marker in text:
+                      text = text.replace(marker, replacement)
+                  else:
+                      text = text.replace('targetSdkVersion = 35\n', 'targetSdkVersion = 35\n        kotlinVersion = "1.9.25"\n')
+              build_gradle.write_text(text)
+
+          # Ensure any generated file still references the correct version
+          for path in android.rglob('*'):
+              if path.is_file() and path.suffix in {'.gradle', '.kts', '.properties'}:
+                  try:
+                      content = path.read_text()
+                  except Exception:
+                      continue
+                  if '1.9.24' in content:
+                      path.write_text(content.replace('1.9.24', '1.9.25'))
+
+          print('android.kotlinVersion=1.9.25')
+          print('build.gradle contains kotlinVersion = "1.9.25" ->', 'kotlinVersion = "1.9.25"' in build_gradle.read_text() if build_gradle.exists() else False)
           PY
 
       - name: Build debug APK
