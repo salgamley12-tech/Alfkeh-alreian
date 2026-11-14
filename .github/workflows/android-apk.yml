@@ -4,16 +4,21 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    paths:
+      - 'index.html'
+      - 'app.js'
+      - 'styles.css'
+      - 'package.json'
+      - 'capacitor.config.json'
+      - 'scripts/**'
+      - '.github/workflows/android-apk.yml'
 
 permissions:
   contents: read
 
 jobs:
   build-apk:
-    name: Build installable Android APK
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -21,70 +26,38 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          # The action's default includes the obsolete `tools` SDK package,
+          # which sdkmanager can no longer resolve on GitHub-hosted runners.
+          packages: platform-tools
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --no-audit --no-fund
 
-      - name: Generate Android native project
-        run: npx expo prebuild --platform android --non-interactive --clean
-
-      - name: Force Kotlin 1.9.25 in generated Android project (Comprehensive)
-        shell: bash
+      - name: Prepare web app and Android project
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          android = Path('android')
-
-          # gradle.properties
-          gradle_properties = android / 'gradle.properties'
-          props = gradle_properties.read_text() if gradle_properties.exists() else ''
-          lines = [line for line in props.splitlines() if not line.strip().startswith('android.kotlinVersion=')]
-          lines.append('android.kotlinVersion=1.9.25')
-          gradle_properties.write_text('\n'.join(lines) + '\n')
-
-          # build.gradle
-          build_gradle = android / 'build.gradle'
-          if build_gradle.exists():
-              text = build_gradle.read_text()
-              text = text.replace('kotlinVersion = "1.9.24"', 'kotlinVersion = "1.9.25"')
-              if 'kotlinVersion = "1.9.25"' not in text:
-                  marker = 'minSdkVersion = 24\n        compileSdkVersion = 35\n        targetSdkVersion = 35\n'
-                  replacement = 'minSdkVersion = 24\n        compileSdkVersion = 35\n        targetSdkVersion = 35\n        kotlinVersion = "1.9.25"\n'
-                  if marker in text:
-                      text = text.replace(marker, replacement)
-                  else:
-                      text = text.replace('targetSdkVersion = 35\n', 'targetSdkVersion = 35\n        kotlinVersion = "1.9.25"\n')
-              build_gradle.write_text(text)
-
-          # Ensure any generated file still references the correct version
-          for path in android.rglob('*'):
-              if path.is_file() and path.suffix in {'.gradle', '.kts', '.properties'}:
-                  try:
-                      content = path.read_text()
-                  except Exception:
-                      continue
-                  if '1.9.24' in content:
-                      path.write_text(content.replace('1.9.24', '1.9.25'))
-
-          print('android.kotlinVersion=1.9.25')
-          print('build.gradle contains kotlinVersion = "1.9.25" ->', 'kotlinVersion = "1.9.25"' in build_gradle.read_text() if build_gradle.exists() else False)
-          PY
+          npm run prepare:web
+          npx cap add android
+          npx cap sync android
 
       - name: Build debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: debt-sales-tracker-apk
+          name: dukkani-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
